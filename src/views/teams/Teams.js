@@ -412,8 +412,8 @@ const Teams = () => {
               <CFormLabel htmlFor="coachSelect">Assign Coach</CFormLabel>
               <CFormSelect
                 id="coachSelect"
-                value={selectedCoach || ''}
-                onChange={(e) => setSelectedCoach(e.target.value ? Number(e.target.value) : null)}
+                value={selectedCoach === null ? '' : selectedCoach}
+                onChange={(e) => setSelectedCoach(e.target.value === '' ? null : parseInt(e.target.value))}
                 required
               >
                 <option value="">Choose a coach...</option>

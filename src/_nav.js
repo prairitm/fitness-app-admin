@@ -26,12 +26,12 @@ const _nav = [
     to: '/dashboard',
     icon: <CIcon icon={cilSpeedometer} customClassName="nav-icon" />,
   },
-  {
-    component: CNavItem,
-    name: 'Clients',
-    to: '/clients',
-    icon: <CIcon icon={cilUser} customClassName="nav-icon" />,
-  },
+  // {
+  //   component: CNavItem,
+  //   name: 'Clients',
+  //   to: '/clients',
+  //   icon: <CIcon icon={cilUser} customClassName="nav-icon" />,
+  // },
   {
     component: CNavItem,
     name: 'Teams',
