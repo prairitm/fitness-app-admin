@@ -428,6 +428,43 @@ const ClientPage = () => {
                           </CButton>
                         )}
                       </div>
+
+
+                      {/* Add video upload and link options */}
+                      <div className="d-flex gap-2 mb-2">
+                        {/* <CFormInput
+                          disabled
+                          type="file"
+                          accept="video/*"
+                          onChange={(e) => {
+                            setWorkoutForm(prev => ({
+                              ...prev,
+                              exercises: prev.exercises.map(ex =>
+                                ex.id === exercise.id
+                                  ? { ...ex, video: e.target.files[0] }
+                                  : ex
+                              )
+                            }));
+                          }}
+                          className="w-50"
+                        /> */}
+                        {/* <span className="text-muted align-self-center">or</span> */}
+                        <CFormInput
+                          placeholder="Paste video URL"
+                          value={exercise.videoUrl || ''}
+                          onChange={(e) => {
+                            setWorkoutForm(prev => ({
+                              ...prev,
+                              exercises: prev.exercises.map(ex =>
+                                ex.id === exercise.id
+                                  ? { ...ex, videoUrl: e.target.value }
+                                  : ex
+                              )
+                            }));
+                          }}
+                          className="w-100"
+                        />
+                      </div>
                       
 
                       <small className="text-muted d-block mb-3">Sets, Reps, Tempo, Rest etc.</small>
@@ -447,40 +484,7 @@ const ClientPage = () => {
                         className="mb-2"
                       />
 
-                      {/* Add video upload and link options */}
-                      <div className="d-flex gap-2 mb-2">
-                        <CFormInput
-                          type="file"
-                          accept="video/*"
-                          onChange={(e) => {
-                            setWorkoutForm(prev => ({
-                              ...prev,
-                              exercises: prev.exercises.map(ex =>
-                                ex.id === exercise.id
-                                  ? { ...ex, video: e.target.files[0] }
-                                  : ex
-                              )
-                            }));
-                          }}
-                          className="w-50"
-                        />
-                        <span className="text-muted align-self-center">or</span>
-                        <CFormInput
-                          placeholder="Paste video URL"
-                          value={exercise.videoUrl || ''}
-                          onChange={(e) => {
-                            setWorkoutForm(prev => ({
-                              ...prev,
-                              exercises: prev.exercises.map(ex =>
-                                ex.id === exercise.id
-                                  ? { ...ex, videoUrl: e.target.value }
-                                  : ex
-                              )
-                            }));
-                          }}
-                          className="w-50"
-                        />
-                      </div>
+                      
                     </div>
                   ))}
                 </div>
