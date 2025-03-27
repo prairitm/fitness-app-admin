@@ -93,6 +93,55 @@ const WorkoutDetailPage = () => {
     return null;
   };
 
+  // Add helper function to get next letter
+  const getNextLetter = (currentLetter) => {
+    return String.fromCharCode(currentLetter.charCodeAt(0) + 1);
+  };
+
+  // Updated handleAddExercise to properly handle the state
+  const handleAddExercise = () => {
+    setEditedWorkout(prev => {
+      const exercises = prev.exercises || [];
+      const lastExercise = exercises[exercises.length - 1];
+      const nextLetter = lastExercise 
+        ? getNextLetter(lastExercise.letter)
+        : 'A';
+
+      return {
+        ...prev,
+        exercises: [
+          ...exercises,
+          {
+            id: Date.now(),
+            letter: nextLetter,
+            title: '',
+            metrics: [],
+            videoUrl: '',
+            notes: ''
+          }
+        ]
+      };
+    });
+  };
+
+  // Updated handleDeleteExercise with proper state management
+  const handleDeleteExercise = (exerciseId) => {
+    setEditedWorkout(prev => {
+      const exercises = prev.exercises || [];
+      const filteredExercises = exercises.filter(ex => ex.id !== exerciseId);
+      
+      const reorderedExercises = filteredExercises.map((exercise, index) => ({
+        ...exercise,
+        letter: String.fromCharCode(65 + index) // 65 is ASCII for 'A'
+      }));
+
+      return {
+        ...prev,
+        exercises: reorderedExercises
+      };
+    });
+  };
+
   const renderContent = () => {
     switch (editedWorkout.type) {
       case 'workout':
@@ -116,16 +165,17 @@ const WorkoutDetailPage = () => {
             <div className="mb-4">
               <h4>Exercises</h4>
               <CListGroup>
-                {editedWorkout.exercises?.map((exercise, index) => (
-                  <CListGroupItem key={exercise.id}>
+                {(editedWorkout.exercises || []).map((exercise, index) => (
+                  <CListGroupItem key={exercise.id || index}>
                     <div className="d-flex align-items-center mb-2">
                       <h5 className="mb-0 me-2">{exercise.letter})</h5>
                       {isEditing ? (
-                        <>
+                        <div className="d-flex w-100 gap-2">
                           <CFormInput
-                            value={exercise.title}
+                            placeholder="Exercise title (required)"
+                            value={exercise.title || ''}
                             onChange={(e) => {
-                              const updatedExercises = [...editedWorkout.exercises];
+                              const updatedExercises = [...(editedWorkout.exercises || [])];
                               updatedExercises[index] = {
                                 ...exercise,
                                 title: e.target.value
@@ -136,51 +186,39 @@ const WorkoutDetailPage = () => {
                               });
                             }}
                           />
-                        </>
+                          {(editedWorkout.exercises || []).length > 1 && (
+                            <CButton
+                              color="danger"
+                              variant="ghost"
+                              onClick={() => handleDeleteExercise(exercise.id)}
+                            >
+                              ×
+                            </CButton>
+                          )}
+                        </div>
                       ) : (
                         <strong>{exercise.title}</strong>
                       )}
                     </div>
 
-                    {/* Add video display/edit section */}
+                    {/* Video section */}
                     {isEditing ? (
                       <div className="ms-4 mb-3">
-                        <div className="d-flex gap-2 align-items-center">
-                          <CFormInput
-                            placeholder="Paste video URL"
-                            value={exercise.videoUrl || ''}
-                            onChange={(e) => {
-                              const updatedExercises = [...editedWorkout.exercises];
-                              updatedExercises[index] = {
-                                ...exercise,
-                                videoUrl: e.target.value
-                              };
-                              setEditedWorkout({
-                                ...editedWorkout,
-                                exercises: updatedExercises
-                              });
-                            }}
-                          />
-                          {exercise.videoUrl && (
-                            <CButton
-                              color="danger"
-                              variant="outline"
-                              onClick={() => {
-                                const updatedExercises = [...editedWorkout.exercises];
-                                updatedExercises[index] = {
-                                  ...exercise,
-                                  videoUrl: ''
-                                };
-                                setEditedWorkout({
-                                  ...editedWorkout,
-                                  exercises: updatedExercises
-                                });
-                              }}
-                            >
-                              Remove Video
-                            </CButton>
-                          )}
-                        </div>
+                        <CFormInput
+                          placeholder="Paste video URL"
+                          value={exercise.videoUrl || ''}
+                          onChange={(e) => {
+                            const updatedExercises = [...(editedWorkout.exercises || [])];
+                            updatedExercises[index] = {
+                              ...exercise,
+                              videoUrl: e.target.value
+                            };
+                            setEditedWorkout({
+                              ...editedWorkout,
+                              exercises: updatedExercises
+                            });
+                          }}
+                        />
                       </div>
                     ) : (
                       <div className="ms-4">
@@ -188,16 +226,47 @@ const WorkoutDetailPage = () => {
                       </div>
                     )}
 
-                    {exercise.metrics && exercise.metrics.length > 0 && (
+                    {/* Exercise notes */}
+                    {isEditing ? (
                       <div className="ms-4">
-                        <small className="text-muted">
-                          Metrics: {exercise.metrics.join(', ')}
-                        </small>
+                        <CFormInput
+                          placeholder="Notes (Sets, Reps, Tempo, Rest etc.)"
+                          value={exercise.notes || ''}
+                          onChange={(e) => {
+                            const updatedExercises = [...(editedWorkout.exercises || [])];
+                            updatedExercises[index] = {
+                              ...exercise,
+                              notes: e.target.value
+                            };
+                            setEditedWorkout({
+                              ...editedWorkout,
+                              exercises: updatedExercises
+                            });
+                          }}
+                          className="mb-2"
+                        />
+                      </div>
+                    ) : exercise.notes && (
+                      <div className="ms-4">
+                        <small className="text-muted">{exercise.notes}</small>
                       </div>
                     )}
                   </CListGroupItem>
                 ))}
               </CListGroup>
+
+              {isEditing && (
+                <div className="d-flex gap-2 mt-3">
+                  <CButton 
+                    color="primary" 
+                    variant="outline" 
+                    className="w-50 mx-auto"
+                    onClick={handleAddExercise}
+                  >
+                    + Exercise
+                  </CButton>
+                </div>
+              )}
             </div>
 
             <div className="mb-4">
