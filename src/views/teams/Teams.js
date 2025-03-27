@@ -28,6 +28,7 @@ import {
   CDropdownMenu,
   CDropdownItem,
   CFormSelect,
+  CAlert,
 } from '@coreui/react';
 import CIcon from '@coreui/icons-react';
 import { cilPlus, cilOptions } from '@coreui/icons';
@@ -152,6 +153,8 @@ const Teams = () => {
   return (
     <>
       <CRow className="mb-4 align-items-center">
+      <CAlert color="info">To add a client, select the coach first</CAlert>
+
         <CCol>
           <h2>Teams</h2>
         </CCol>
