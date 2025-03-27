@@ -72,6 +72,7 @@ const Teams = () => {
       setCoaches(updatedCoaches);
       localStorage.setItem('coaches', JSON.stringify(updatedCoaches));
       setNewClient({ name: '', email: '' });
+      setSelectedCoach(null);
       setShowClientModal(false);
     }
   };
@@ -153,8 +154,6 @@ const Teams = () => {
   return (
     <>
       <CRow className="mb-4 align-items-center">
-      <CAlert color="info">To add a client, select the coach first</CAlert>
-
         <CCol>
           <h2>Teams</h2>
         </CCol>
@@ -169,7 +168,6 @@ const Teams = () => {
           <CButton 
             color="secondary"
             onClick={() => setShowClientModal(true)}
-            disabled={selectedCoach === null}
           >
             <CIcon icon={cilPlus} className="me-2" /> Add Client
           </CButton>
@@ -386,14 +384,7 @@ const Teams = () => {
       >
         <CForm onSubmit={handleAddClient}>
           <CModalHeader>
-            <CModalTitle>
-              Add New Client
-              {selectedCoach !== null && (
-                <small className="text-muted ms-2">
-                  for {coaches[selectedCoach]?.name}
-                </small>
-              )}
-            </CModalTitle>
+            <CModalTitle>Add New Client</CModalTitle>
           </CModalHeader>
           <CModalBody>
             <div className="mb-3">
@@ -417,11 +408,31 @@ const Teams = () => {
                 required
               />
             </div>
+            <div className="mb-3">
+              <CFormLabel htmlFor="coachSelect">Assign Coach</CFormLabel>
+              <CFormSelect
+                id="coachSelect"
+                value={selectedCoach || ''}
+                onChange={(e) => setSelectedCoach(e.target.value ? Number(e.target.value) : null)}
+                required
+              >
+                <option value="">Choose a coach...</option>
+                {coaches.map((coach, index) => (
+                  <option key={index} value={index}>
+                    {coach.name}
+                  </option>
+                ))}
+              </CFormSelect>
+            </div>
           </CModalBody>
           <CModalFooter>
             <CButton 
               color="secondary" 
-              onClick={() => setShowClientModal(false)}
+              onClick={() => {
+                setShowClientModal(false);
+                setNewClient({ name: '', email: '' });
+                setSelectedCoach(null);
+              }}
             >
               Cancel
             </CButton>
