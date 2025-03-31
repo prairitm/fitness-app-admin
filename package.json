@@ -7,7 +7,7 @@
     "url": "https://github.com/coreui/coreui-free-react-admin-template/issues"
   },
   "repository": {
-    "type": "git",
+    "type": "git"
   },
   "license": "MIT",
   "scripts": {
