@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   CCard,
@@ -16,44 +16,140 @@ import {
   CFormTextarea,
   CFormInput,
 } from '@coreui/react';
+import { workoutService } from '../../services/api';
 
 const WorkoutDetailPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { clientEmail } = useParams();
-  const { workout } = location.state;
+  const { clientEmail, workoutId } = useParams();
+  const [workout, setWorkout] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedWorkout, setEditedWorkout] = useState(workout);
+  const [editedWorkout, setEditedWorkout] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleDelete = () => {
+  useEffect(() => {
+    const fetchWorkout = async () => {
+      try {
+        const response = await workoutService.getWorkoutById(workoutId);
+        console.log('Fetched workout:', response.data); // Debug log
+        
+        // Transform the data to match frontend expectations
+        const transformedWorkout = {
+          _id: response.data._id,
+          title: response.data.title || 'Untitled Workout',
+          date: response.data.date,
+          type: response.data.type || 'workout',
+          warmup: response.data.warmupNote || '',
+          cooldown: response.data.cooldownNote || '',
+          description: response.data.description || '',
+          exercises: response.data.exerciseSections?.map(section => ({
+            id: section._id,
+            letter: section.sectionLetter,
+            title: section.exercises[0]?.title || '',
+            videoUrl: section.exercises[0]?.videoUrl || '',
+            notes: section.exercises[0]?.metrics?.[0] || '',
+            sets: section.exercises[0]?.sets || null,
+            reps: section.exercises[0]?.reps || null,
+            weight: section.exercises[0]?.weight || null,
+            duration: section.exercises[0]?.duration || null,
+            restPeriod: section.exercises[0]?.restPeriod || null
+          })) || []
+        };
+        
+        console.log('Transformed workout:', transformedWorkout); // Debug log
+        setWorkout(transformedWorkout);
+        setEditedWorkout(transformedWorkout);
+      } catch (err) {
+        console.error('Error fetching workout:', err);
+        setError('Failed to load workout');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (workoutId) {
+      fetchWorkout();
+    }
+  }, [workoutId]);
+
+  // Add debug logging for render
+  useEffect(() => {
+    console.log('Current workout state:', workout);
+    console.log('Current editedWorkout state:', editedWorkout);
+  }, [workout, editedWorkout]);
+
+  const handleDelete = async () => {
     try {
-      // Get current workouts from localStorage
-      const savedWorkouts = JSON.parse(localStorage.getItem(`workouts_${clientEmail}`) || '[]');
-      
-      // Filter out the current workout
-      const updatedWorkouts = savedWorkouts.filter(w => w.id !== workout.id);
-      
-      // Save back to localStorage
-      localStorage.setItem(`workouts_${clientEmail}`, JSON.stringify(updatedWorkouts));
-      
-      // Navigate back
+      await workoutService.deleteWorkout(workoutId);
       navigate(-1);
-    } catch (error) {
-      console.error('Failed to delete workout:', error);
+    } catch (err) {
+      setError('Failed to delete workout');
+      console.error(err);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
-      const savedWorkouts = JSON.parse(localStorage.getItem(`workouts_${clientEmail}`) || '[]');
-      const updatedWorkouts = savedWorkouts.map(w => 
-        w.id === workout.id ? editedWorkout : w
-      );
-      localStorage.setItem(`workouts_${clientEmail}`, JSON.stringify(updatedWorkouts));
+      // Transform the data back to API format
+      const apiWorkoutData = {
+        title: editedWorkout.title,
+        date: editedWorkout.date,
+        type: editedWorkout.type,
+        description: editedWorkout.description,
+        warmupNote: editedWorkout.warmup,
+        cooldownNote: editedWorkout.cooldown,
+        exerciseSections: editedWorkout.exercises.map((exercise, index) => ({
+          sectionLetter: exercise.letter,
+          exercises: [{
+            title: exercise.title,
+            videoUrl: exercise.videoUrl || '',
+            metrics: exercise.notes ? [exercise.notes] : [],
+            sets: exercise.sets || null,
+            reps: exercise.reps || null,
+            weight: exercise.weight || null,
+            duration: exercise.duration || null,
+            restPeriod: exercise.restPeriod || null
+          }],
+          order: index + 1
+        }))
+      };
+
+      console.log('Sending to API:', apiWorkoutData); // Debug log
+      const response = await workoutService.updateWorkout(workoutId, apiWorkoutData);
+      console.log('API Response:', response.data); // Debug log
+
+      // Transform the response data to match frontend format
+      const transformedWorkout = {
+        _id: response.data._id,
+        title: response.data.title || 'Untitled Workout',
+        date: response.data.date,
+        type: response.data.type || 'workout',
+        warmup: response.data.warmupNote || '',
+        cooldown: response.data.cooldownNote || '',
+        description: response.data.description || '',
+        exercises: response.data.exerciseSections?.map(section => ({
+          id: section._id,
+          letter: section.sectionLetter,
+          title: section.exercises[0]?.title || '',
+          videoUrl: section.exercises[0]?.videoUrl || '',
+          notes: section.exercises[0]?.metrics?.[0] || '',
+          sets: section.exercises[0]?.sets || null,
+          reps: section.exercises[0]?.reps || null,
+          weight: section.exercises[0]?.weight || null,
+          duration: section.exercises[0]?.duration || null,
+          restPeriod: section.exercises[0]?.restPeriod || null
+        })) || []
+      };
+
+      // Update both states with the transformed data
+      setWorkout(transformedWorkout);
+      setEditedWorkout(transformedWorkout);
       setIsEditing(false);
-    } catch (error) {
-      console.error('Failed to save workout:', error);
+    } catch (err) {
+      console.error('Error saving workout:', err);
+      setError('Failed to save workout');
     }
   };
 
@@ -143,7 +239,7 @@ const WorkoutDetailPage = () => {
   };
 
   const renderContent = () => {
-    switch (editedWorkout.type) {
+    switch (workout.type) {
       case 'workout':
         return (
           <>
@@ -158,14 +254,14 @@ const WorkoutDetailPage = () => {
                   })}
                 />
               ) : (
-                <p>{editedWorkout.warmup}</p>
+                <p>{workout.warmup}</p>
               )}
             </div>
 
             <div className="mb-4">
               <h4>Exercises</h4>
               <CListGroup>
-                {(editedWorkout.exercises || []).map((exercise, index) => (
+                {(isEditing ? editedWorkout.exercises : workout.exercises).map((exercise, index) => (
                   <CListGroupItem key={exercise.id || index}>
                     <div className="d-flex align-items-center mb-2">
                       <h5 className="mb-0 me-2">{exercise.letter})</h5>
@@ -175,7 +271,7 @@ const WorkoutDetailPage = () => {
                             placeholder="Exercise title (required)"
                             value={exercise.title || ''}
                             onChange={(e) => {
-                              const updatedExercises = [...(editedWorkout.exercises || [])];
+                              const updatedExercises = [...editedWorkout.exercises];
                               updatedExercises[index] = {
                                 ...exercise,
                                 title: e.target.value
@@ -186,7 +282,7 @@ const WorkoutDetailPage = () => {
                               });
                             }}
                           />
-                          {(editedWorkout.exercises || []).length > 1 && (
+                          {editedWorkout.exercises.length > 1 && (
                             <CButton
                               color="danger"
                               variant="ghost"
@@ -208,7 +304,7 @@ const WorkoutDetailPage = () => {
                           placeholder="Paste video URL"
                           value={exercise.videoUrl || ''}
                           onChange={(e) => {
-                            const updatedExercises = [...(editedWorkout.exercises || [])];
+                            const updatedExercises = [...editedWorkout.exercises];
                             updatedExercises[index] = {
                               ...exercise,
                               videoUrl: e.target.value
@@ -233,7 +329,7 @@ const WorkoutDetailPage = () => {
                           placeholder="Notes (Sets, Reps, Tempo, Rest etc.)"
                           value={exercise.notes || ''}
                           onChange={(e) => {
-                            const updatedExercises = [...(editedWorkout.exercises || [])];
+                            const updatedExercises = [...editedWorkout.exercises];
                             updatedExercises[index] = {
                               ...exercise,
                               notes: e.target.value
@@ -280,7 +376,7 @@ const WorkoutDetailPage = () => {
                   })}
                 />
               ) : (
-                <p>{editedWorkout.cooldown}</p>
+                <p>{workout.cooldown}</p>
               )}
             </div>
           </>
@@ -300,7 +396,7 @@ const WorkoutDetailPage = () => {
                 })}
               />
             ) : (
-              <p>{editedWorkout.description}</p>
+              <p>{workout.description}</p>
             )}
           </div>
         );
@@ -309,6 +405,18 @@ const WorkoutDetailPage = () => {
         return null;
     }
   };
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  if (!workout) {
+    return <div>Workout not found</div>;
+  }
 
   return (
     <>
@@ -381,10 +489,10 @@ const WorkoutDetailPage = () => {
               })}
             />
           ) : (
-            <h3>{editedWorkout.title || 'Untitled'}</h3>
+            <h3>{workout.title || 'Untitled'}</h3>
           )}
           <div className="text-muted">
-            {editedWorkout.type.charAt(0).toUpperCase() + editedWorkout.type.slice(1)}
+            {(workout?.type || 'workout').charAt(0).toUpperCase() + (workout?.type || 'workout').slice(1)}
           </div>
         </CCardHeader>
         <CCardBody>

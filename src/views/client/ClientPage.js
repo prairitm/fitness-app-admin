@@ -30,37 +30,24 @@ import interactionPlugin from '@fullcalendar/interaction';
 import CIcon from '@coreui/icons-react';
 import { cilPlus } from '@coreui/icons';
 import './Calendar.css';
+import { workoutService } from '../../services/api';
+import { teamService } from '../../services/api';
 
 const ClientPage = () => {
   const { clientEmail } = useParams();
   const navigate = useNavigate();
   
-  // Update state management to use localStorage
-  const [clientData, setClientData] = useState(() => {
-    const savedClients = JSON.parse(localStorage.getItem('coaches') || '[]');
-    const client = savedClients
-      .flatMap(coach => coach.clients)
-      .find(client => client.email === clientEmail);
-    return client || null;
-  });
-
-  const [workouts, setWorkouts] = useState(() => {
-    const savedWorkouts = localStorage.getItem(`workouts_${clientEmail}`);
-    return savedWorkouts ? JSON.parse(savedWorkouts) : [];
-  });
-
-  // Remove loading since we're not fetching from API
+  const [clientData, setClientData] = useState(null);
+  const [workouts, setWorkouts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Modal states
   const [showWorkoutModal, setShowWorkoutModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
   
-  // Add new state for active tab
   const [activeTab, setActiveTab] = useState('workout');
 
-  // Form state
   const [workoutForm, setWorkoutForm] = useState({
     title: '',
     date: '',
@@ -78,12 +65,10 @@ const ClientPage = () => {
     description: ''
   });
 
-  // Add helper function to get next letter
   const getNextLetter = (currentLetter) => {
     return String.fromCharCode(currentLetter.charCodeAt(0) + 1);
   };
 
-  // Add handler for adding new exercise
   const handleAddExercise = () => {
     setWorkoutForm(prev => {
       const lastExercise = prev.exercises[prev.exercises.length - 1];
@@ -93,7 +78,7 @@ const ClientPage = () => {
         exercises: [
           ...prev.exercises,
           {
-            id: Date.now(), // unique id for each exercise
+            id: Date.now(),
             letter: nextLetter,
             title: '',
             metrics: [],
@@ -105,16 +90,13 @@ const ClientPage = () => {
     });
   };
 
-  // Update the handleDeleteExercise function
   const handleDeleteExercise = (exerciseId) => {
     setWorkoutForm(prev => {
-      // First filter out the deleted exercise
       const filteredExercises = prev.exercises.filter(ex => ex.id !== exerciseId);
       
-      // Then reassign letters starting from 'A'
       const reorderedExercises = filteredExercises.map((exercise, index) => ({
         ...exercise,
-        letter: String.fromCharCode(65 + index) // 65 is ASCII for 'A'
+        letter: String.fromCharCode(65 + index)
       }));
 
       return {
@@ -124,7 +106,6 @@ const ClientPage = () => {
     });
   };
 
-  // Handle calendar date click
   const handleDateClick = (arg) => {
     setSelectedDate(arg.date);
     setSelectedWorkout(null);
@@ -147,99 +128,89 @@ const ClientPage = () => {
     setShowWorkoutModal(true);
   };
 
-  // Update handleEventClick to include error handling
   const handleEventClick = (arg) => {
     if (!arg.event || !arg.event.id) {
       console.error('Event data is missing');
       return;
     }
 
-    const workout = workouts.find(w => w.id === parseInt(arg.event.id) || w.id === arg.event.id);
+    const workout = workouts.find(w => w._id === arg.event.id);
     if (!workout) {
       console.error('Workout not found');
       return;
     }
 
-    navigate(`/client/${clientEmail}/workout/${workout.id}`, { 
+    navigate(`/client/${clientEmail}/workout/${workout._id}`, { 
       state: { workout } 
     });
   };
 
-  // Update handleSubmitWorkout function
+  useEffect(() => {
+    fetchClientData();
+  }, [clientEmail]);
+
+  const fetchClientData = async () => {
+    try {
+      const email = clientEmail;
+      const response = await teamService.getClientByEmail(email);
+      setClientData(response.data);
+      await fetchWorkouts(response.data._id);
+    } catch (error) {
+      console.error('Error fetching client:', error);
+      setError('Failed to fetch client data');
+    }
+  };
+
+  const fetchWorkouts = async (clientId) => {
+    try {
+      const response = await teamService.getClientWorkouts(clientId);
+      setWorkouts(response.data);
+    } catch (error) {
+      console.error('Error fetching workouts:', error);
+      setError('Failed to fetch workouts');
+    }
+  };
+
   const handleSubmitWorkout = async (e) => {
     e.preventDefault();
     try {
-      // Create workout object based on the active tab
-      let workoutToSave = {
-        id: selectedWorkout?.id || Date.now(),
-        date: workoutForm.date,
-        type: activeTab,
-        clientEmail
-      };
-
-      // Add fields based on activity type
-      switch (activeTab) {
-        case 'workout':
-          workoutToSave = {
-            ...workoutToSave,
-            title: workoutForm.title || 'Untitled Workout',
-            warmup: workoutForm.warmup,
-            exercises: workoutForm.exercises,
-            cooldown: workoutForm.cooldown
-          };
-          break;
-        case 'habit':
-          workoutToSave = {
-            ...workoutToSave,
-            title: workoutForm.title || 'Untitled Habit',
-            description: workoutForm.description
-          };
-          break;
-        case 'rest':
-          workoutToSave = {
-            ...workoutToSave,
-            title: 'Rest Day',
-            description: workoutForm.description
-          };
-          break;
-        default:
-          break;
-      }
-
-      let updatedWorkouts;
+      let response;
       if (selectedWorkout) {
-        updatedWorkouts = workouts.map(w => 
-          w.id === selectedWorkout.id ? workoutToSave : w
-        );
+        response = await workoutService.updateWorkout(selectedWorkout._id, workoutForm);
       } else {
-        updatedWorkouts = [...workouts, workoutToSave];
+        response = await workoutService.createWorkout({
+          ...workoutForm,
+          clientId: clientData._id
+        });
       }
-
-      setWorkouts(updatedWorkouts);
-      localStorage.setItem(`workouts_${clientEmail}`, JSON.stringify(updatedWorkouts));
+      
+      await fetchWorkouts(clientData._id);
+      
       setShowWorkoutModal(false);
-
-      // Reset form after successful save
-      setWorkoutForm({
-        title: '',
-        date: '',
-        type: 'workout',
-        warmup: '',
-        exercises: [{
-          id: 1,
-          letter: 'A',
-          title: '',
-          metrics: [],
-          video: null,
-          videoUrl: ''
-        }],
-        cooldown: '',
-        description: ''
-      });
+      resetWorkoutForm();
     } catch (err) {
       setError('Failed to save workout');
       console.error(err);
     }
+  };
+
+  const resetWorkoutForm = () => {
+    setWorkoutForm({
+      title: '',
+      date: '',
+      type: 'workout',
+      warmup: '',
+      exercises: [{
+        id: 1,
+        letter: 'A',
+        title: '',
+        metrics: [],
+        video: null,
+        videoUrl: ''
+      }],
+      cooldown: '',
+      description: ''
+    });
   };
 
   if (!clientData) {
@@ -278,13 +249,13 @@ const ClientPage = () => {
               <FullCalendar
                 plugins={[dayGridPlugin, interactionPlugin]} 
                 initialView="dayGridMonth"
-                events={workouts.map(workout => ({
-                  id: workout.id.toString(),
-                  title: workout.title,
-                  date: workout.date,
+                events={workouts?.filter(workout => workout != null).map(workout => ({
+                  id: workout._id,
+                  title: workout?.title ?? 'Untitled Workout',
+                  date: workout?.date ?? new Date(),
                   allDay: true,
                   className: 'modern-event'
-                }))}
+                })) ?? []}
                 dateClick={handleDateClick}
                 eventClick={handleEventClick}
                 height="auto"
@@ -293,8 +264,13 @@ const ClientPage = () => {
                   center: '',
                   end: 'prev,next'
                 }}
-                dayHeaderFormat={{ weekday: 'long' }}
-                titleFormat={{ month: 'long', year: 'numeric' }}
+                dayHeaderFormat={{ 
+                  weekday: window.innerWidth < 768 ? 'short' : 'long' 
+                }}
+                titleFormat={{ 
+                  month: 'long', 
+                  year: 'numeric' 
+                }}
                 firstDay={1}
                 fixedWeekCount={false}
                 showNonCurrentDates={false}
@@ -305,13 +281,17 @@ const ClientPage = () => {
                   meridiem: false
                 }}
                 dayHeaderClassNames="calendar-day-header"
+                contentHeight="auto"
+                aspectRatio={1.35}
+                handleWindowResize={true}
+                stickyHeaderDates={true}
+                expandRows={true}
               />
             </CCardBody>
           </CCard>
         </CCol>
       </CRow>
 
-      {/* Workout Modal */}
       <CModal
         visible={showWorkoutModal}
         onClose={() => setShowWorkoutModal(false)}
@@ -429,26 +409,7 @@ const ClientPage = () => {
                         )}
                       </div>
 
-
-                      {/* Add video upload and link options */}
                       <div className="d-flex gap-2 mb-2">
-                        {/* <CFormInput
-                          disabled
-                          type="file"
-                          accept="video/*"
-                          onChange={(e) => {
-                            setWorkoutForm(prev => ({
-                              ...prev,
-                              exercises: prev.exercises.map(ex =>
-                                ex.id === exercise.id
-                                  ? { ...ex, video: e.target.files[0] }
-                                  : ex
-                              )
-                            }));
-                          }}
-                          className="w-50"
-                        /> */}
-                        {/* <span className="text-muted align-self-center">or</span> */}
                         <CFormInput
                           placeholder="Paste video URL"
                           value={exercise.videoUrl || ''}
@@ -466,7 +427,6 @@ const ClientPage = () => {
                         />
                       </div>
                       
-
                       <small className="text-muted d-block mb-3">Sets, Reps, Tempo, Rest etc.</small>
                       <CFormInput
                         placeholder="Notes"
@@ -483,8 +443,6 @@ const ClientPage = () => {
                         }}
                         className="mb-2"
                       />
-
-                      
                     </div>
                   ))}
                 </div>

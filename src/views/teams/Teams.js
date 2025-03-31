@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CCard,
   CCardHeader,
@@ -33,12 +33,12 @@ import {
 import CIcon from '@coreui/icons-react';
 import { cilPlus, cilOptions } from '@coreui/icons';
 import { useNavigate } from 'react-router-dom';
+import { teamService } from '../../services/api';
 
 const Teams = () => {
-  const [coaches, setCoaches] = useState(() => {
-    const savedCoaches = localStorage.getItem('coaches');
-    return savedCoaches ? JSON.parse(savedCoaches) : [];
-  });
+  const [coaches, setCoaches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [newCoach, setNewCoach] = useState({ name: '', email: '', clients: [] });
   const [newClient, setNewClient] = useState({ name: '', email: '' });
   const [selectedCoach, setSelectedCoach] = useState(null);
@@ -51,36 +51,58 @@ const Teams = () => {
   const [selectedNewCoach, setSelectedNewCoach] = useState(null);
   const navigate = useNavigate();
 
-  // Handle coach addition
-  const handleAddCoach = (e) => {
-    e.preventDefault();
-    if (newCoach.name && newCoach.email) {
-      const updatedCoaches = [...coaches, { ...newCoach, clients: [] }];
-      setCoaches(updatedCoaches);
-      localStorage.setItem('coaches', JSON.stringify(updatedCoaches));
-      setNewCoach({ name: '', email: '', clients: [] });
-      setShowCoachModal(false);
+  useEffect(() => {
+    fetchCoaches();
+  }, []);
+
+  const fetchCoaches = async () => {
+    try {
+      setLoading(true);
+      const response = await teamService.getCoaches();
+      setCoaches(response.data);
+    } catch (err) {
+      setError('Failed to fetch coaches');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handle client addition
-  const handleAddClient = (e) => {
+  const handleAddCoach = async (e) => {
     e.preventDefault();
-    if (newClient.name && newClient.email && selectedCoach !== null) {
-      const updatedCoaches = [...coaches];
-      updatedCoaches[selectedCoach].clients.push(newClient);
-      setCoaches(updatedCoaches);
-      localStorage.setItem('coaches', JSON.stringify(updatedCoaches));
+    try {
+      await teamService.addCoach(newCoach);
+      await fetchCoaches();
+      setNewCoach({ name: '', email: '', clients: [] });
+      setShowCoachModal(false);
+    } catch (err) {
+      setError('Failed to add coach');
+      console.error(err);
+    }
+  };
+
+  const handleAddClient = async (e) => {
+    e.preventDefault();
+    try {
+      const selectedCoachData = coaches[selectedCoach];
+      if (!selectedCoachData) {
+        setError('Please select a coach first');
+        return;
+      }
+      await teamService.addClient(selectedCoachData._id, newClient);
+      await fetchCoaches(); // Fetch updated coaches list
       setNewClient({ name: '', email: '' });
-      setSelectedCoach(null);
       setShowClientModal(false);
+      setSelectedCoach(null);
+    } catch (err) {
+      setError('Failed to add client');
+      console.error(err);
     }
   };
 
   const handleDeleteCoach = (coachIndex) => {
     const updatedCoaches = coaches.filter((_, index) => index !== coachIndex);
     setCoaches(updatedCoaches);
-    localStorage.setItem('coaches', JSON.stringify(updatedCoaches));
     if (selectedCoach === coachIndex) {
       setSelectedCoach(null);
     }
@@ -106,7 +128,6 @@ const Teams = () => {
 
     // Update state and localStorage
     setCoaches(updatedCoaches);
-    localStorage.setItem('coaches', JSON.stringify(updatedCoaches));
   }
 
   const handleTransferClient = () => {
@@ -140,33 +161,51 @@ const Teams = () => {
       
       // Update state and localStorage
       setCoaches(updatedCoaches);
-      localStorage.setItem('coaches', JSON.stringify(updatedCoaches));
-      
-      // Reset and close modal
-      setTransferModalVisible(false);
-      setClientToTransfer(null);
-      setSelectedNewCoach(null);
     } catch (error) {
       console.error('Error during transfer:', error);
     }
   };
 
+  const filteredCoaches = React.useMemo(() => {
+    if (!coaches || !Array.isArray(coaches)) return [];
+    if (!searchQuery) return coaches;
+
+    return coaches.filter(coach => {
+      try {
+        // Get coach name and email safely
+        const firstName = coach?.userId?.firstName || '';
+        const lastName = coach?.userId?.lastName || '';
+        const email = coach?.userId?.email || '';
+        const searchLower = searchQuery.toLowerCase();
+
+        // Check if any of the fields match
+        return firstName.toLowerCase().includes(searchLower) ||
+               lastName.toLowerCase().includes(searchLower) ||
+               email.toLowerCase().includes(searchLower);
+      } catch (error) {
+        console.error('Error filtering coach:', error);
+        return false;
+      }
+    });
+  }, [coaches, searchQuery]);
+
   return (
     <>
       <CRow className="mb-4 align-items-center">
-        <CCol>
+        <CCol xs={12} sm={6}>
           <h2>Teams</h2>
         </CCol>
-        <CCol xs="auto">
+        <CCol xs={12} sm={6} className="d-flex justify-content-sm-end mt-3 mt-sm-0">
           <CButton 
             color="primary" 
-            className="me-2"
+            className="me-2 w-100 w-sm-auto"
             onClick={() => setShowCoachModal(true)}
           >
             <CIcon icon={cilPlus} className="me-2" /> Add Coach
           </CButton>
           <CButton 
             color="secondary"
+            className="w-100 w-sm-auto"
             onClick={() => setShowClientModal(true)}
           >
             <CIcon icon={cilPlus} className="me-2" /> Add Client
@@ -175,75 +214,81 @@ const Teams = () => {
       </CRow>
 
       <CRow>
-        {/* Coaches Table */}
-        <CCol md={5}>
+        <CCol xs={12}>
+          {error && (
+            <CAlert color="danger" dismissible onClose={() => setError(null)}>
+              {error}
+            </CAlert>
+          )}
           <CCard>
             <CCardHeader>
               <h4 className="mb-0">Coaches</h4>
             </CCardHeader>
-            <CCardBody>
-              <CTable hover responsive align="middle">
-                <CTableHead>
-                  <CTableRow>
-                    <CTableHeaderCell>Name</CTableHeaderCell>
-                    <CTableHeaderCell>Email</CTableHeaderCell>
-                    <CTableHeaderCell>Clients</CTableHeaderCell>
-                    <CTableHeaderCell></CTableHeaderCell>
-                  </CTableRow>
-                </CTableHead>
-                <CTableBody>
-                  {coaches.map((coach, index) => (
-                    <CTableRow 
-                      key={index}
-                      active={selectedCoach === index}
-                      onClick={() => setSelectedCoach(index)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <CTableDataCell>
-                        <div className="d-flex align-items-center">
-                          <CAvatar color="primary" className="me-3">
-                            {coach.name[0]}
-                          </CAvatar>
-                          {coach.name}
-                        </div>
-                      </CTableDataCell>
-                      <CTableDataCell>{coach.email}</CTableDataCell>
-                      <CTableDataCell>
-                        <CBadge color="info">{coach.clients.length}</CBadge>
-                      </CTableDataCell>
-                      <CTableDataCell>
-                        <CDropdown alignment="end">
-                          <CDropdownToggle color="link" caret={false}>
-                            <CIcon icon={cilOptions} />
-                          </CDropdownToggle>
-                          <CDropdownMenu>
-                            <CDropdownItem 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteCoach(index);
-                              }}
-                            >
-                              Delete
-                            </CDropdownItem>
-                          </CDropdownMenu>
-                        </CDropdown>
-                      </CTableDataCell>
+            <CCardBody className="p-0">
+              <div className="table-responsive">
+                <CTable hover align="middle">
+                  <CTableHead>
+                    <CTableRow>
+                      <CTableHeaderCell>Name</CTableHeaderCell>
+                      <CTableHeaderCell className="d-none d-md-table-cell">Email</CTableHeaderCell>
+                      <CTableHeaderCell>Clients</CTableHeaderCell>
+                      <CTableHeaderCell></CTableHeaderCell>
                     </CTableRow>
-                  ))}
-                </CTableBody>
-              </CTable>
+                  </CTableHead>
+                  <CTableBody>
+                    {filteredCoaches.map((coach, index) => (
+                      <CTableRow 
+                        key={index}
+                        active={selectedCoach === index}
+                        onClick={() => setSelectedCoach(index)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <CTableDataCell>
+                          <div className="d-flex align-items-center">
+                            <CAvatar color="primary" className="me-2">
+                              {(coach.name || (coach.userId?.firstName + ' ' + coach.userId?.lastName))[0]}
+                            </CAvatar>
+                            <span className="text-truncate">{coach.name || (coach.userId?.firstName + ' ' + coach.userId?.lastName) || 'N/A'}</span>
+                          </div>
+                        </CTableDataCell>
+                        <CTableDataCell className="d-none d-md-table-cell text-truncate">{coach.email || coach.userId?.email || 'N/A'}</CTableDataCell>
+                        <CTableDataCell>
+                          <CBadge color="info">{coach.clients?.length || 'N/A'}</CBadge>
+                        </CTableDataCell>
+                        <CTableDataCell>
+                          <CDropdown alignment="end">
+                            <CDropdownToggle color="link" caret={false}>
+                              <CIcon icon={cilOptions} />
+                            </CDropdownToggle>
+                            <CDropdownMenu>
+                              <CDropdownItem 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCoach(index);
+                                }}
+                              >
+                                Delete
+                              </CDropdownItem>
+                            </CDropdownMenu>
+                          </CDropdown>
+                        </CTableDataCell>
+                      </CTableRow>
+                    ))}
+                  </CTableBody>
+                </CTable>
+              </div>
             </CCardBody>
           </CCard>
         </CCol>
 
         {/* Clients Table */}
-        <CCol md={7}>
+        <CCol xs={12}>
           <CCard>
             <CCardHeader>
-              <div className="d-flex justify-content-between align-items-center">
+              <div className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
                 <h4 className="mb-0">
                   {selectedCoach !== null 
-                    ? `${coaches[selectedCoach]?.name}'s Clients` 
+                    ? `${coaches[selectedCoach]?.userId?.firstName} ${coaches[selectedCoach]?.userId?.lastName}` 
                     : 'All Clients'}
                 </h4>
                 <CInputGroup style={{ width: 'auto' }}>
@@ -255,74 +300,93 @@ const Teams = () => {
                 </CInputGroup>
               </div>
             </CCardHeader>
-            <CCardBody>
-              <CTable hover responsive align="middle">
-                <CTableHead>
-                  <CTableRow>
-                    <CTableHeaderCell>Name</CTableHeaderCell>
-                    <CTableHeaderCell>Email</CTableHeaderCell>
-                    <CTableHeaderCell>Status</CTableHeaderCell>
-                    <CTableHeaderCell>Compliance</CTableHeaderCell>
-                    <CTableHeaderCell></CTableHeaderCell>
-                  </CTableRow>
-                </CTableHead>
-                <CTableBody>
-                  {(selectedCoach !== null ? coaches[selectedCoach]?.clients : 
-                    coaches.flatMap(coach => coach.clients))
-                    .filter(client => client.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                    .map((client, index) => (
-                      <CTableRow 
-                        key={index}
-                        onClick={() => navigate(`/client/${client.email}`)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <CTableDataCell>
-                          <div className="d-flex align-items-center">
-                            <CAvatar color="secondary" className="me-3">
-                              {client.name[0]}
-                            </CAvatar>
-                            {client.name}
-                          </div>
-                        </CTableDataCell>
-                        <CTableDataCell>{client.email}</CTableDataCell>
-                        <CTableDataCell>
-                          <CBadge color="success">Active</CBadge>
-                        </CTableDataCell>
-                        <CTableDataCell>
-                          <CBadge color="info">95%</CBadge>
-                        </CTableDataCell>
-                        <CTableDataCell onClick={(e) => e.stopPropagation()}>
-                          {selectedCoach !== null && (
-                            <CDropdown alignment="end">
-                              <CDropdownToggle color="link" caret={false}>
-                                <CIcon icon={cilOptions} />
-                              </CDropdownToggle>
-                              <CDropdownMenu>
-                                <CDropdownItem 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteClient(index);
-                                  }}
-                                >
-                                  Delete
-                                </CDropdownItem>
-                                <CDropdownItem 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setClientToTransfer(index);
-                                    setTransferModalVisible(true);
-                                  }}
-                                >
-                                  Transfer
-                                </CDropdownItem>
-                              </CDropdownMenu>
-                            </CDropdown>
-                          )}
-                        </CTableDataCell>
-                      </CTableRow>
-                  ))}
-                </CTableBody>
-              </CTable>
+            <CCardBody className="p-0">
+              <div className="table-responsive">
+                <CTable hover align="middle">
+                  <CTableHead>
+                    <CTableRow>
+                      <CTableHeaderCell>Name</CTableHeaderCell>
+                      <CTableHeaderCell className="d-none d-md-table-cell">Email</CTableHeaderCell>
+                      <CTableHeaderCell>Status</CTableHeaderCell>
+                      <CTableHeaderCell className="d-none d-sm-table-cell">Compliance</CTableHeaderCell>
+                      <CTableHeaderCell></CTableHeaderCell>
+                    </CTableRow>
+                  </CTableHead>
+                  <CTableBody>
+                    {(selectedCoach !== null ? coaches[selectedCoach]?.clients : 
+                      coaches.flatMap(coach => coach.clients))
+                      .filter(client => {
+                        if (!client || !searchQuery) return true;
+                        try {
+                          const clientName = client.name || '';
+                          const clientEmail = client.email || '';
+                          const searchLower = searchQuery.toLowerCase();
+                          
+                          return (clientName && clientName.toLowerCase().includes(searchLower)) ||
+                                 (clientEmail && clientEmail.toLowerCase().includes(searchLower));
+                        } catch (error) {
+                          console.error('Error filtering client:', error);
+                          return false;
+                        }
+                      })
+                      .map((client, index) => (
+                        <CTableRow 
+                          key={index}
+                          onClick={() => navigate(`/client/${client.email}`)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <CTableDataCell>
+                            <div className="d-flex align-items-center">
+                              <CAvatar color="secondary" className="me-2">
+                                {(client.name || '')[0] || '?'}
+                              </CAvatar>
+                              <span className="text-truncate">
+                                {client.name || 'N/A'}
+                              </span>
+                            </div>
+                          </CTableDataCell>
+                          <CTableDataCell className="d-none d-md-table-cell text-truncate">
+                            {client.email || 'N/A'}
+                          </CTableDataCell>
+                          <CTableDataCell>
+                            <CBadge color="success">Active</CBadge>
+                          </CTableDataCell>
+                          <CTableDataCell className="d-none d-sm-table-cell">
+                            <CBadge color="info">95%</CBadge>
+                          </CTableDataCell>
+                          <CTableDataCell onClick={(e) => e.stopPropagation()}>
+                            {selectedCoach !== null && (
+                              <CDropdown alignment="end">
+                                <CDropdownToggle color="link" caret={false}>
+                                  <CIcon icon={cilOptions} />
+                                </CDropdownToggle>
+                                <CDropdownMenu>
+                                  <CDropdownItem 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteClient(index);
+                                    }}
+                                  >
+                                    Delete
+                                  </CDropdownItem>
+                                  <CDropdownItem 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setClientToTransfer(index);
+                                      setTransferModalVisible(true);
+                                    }}
+                                  >
+                                    Transfer
+                                  </CDropdownItem>
+                                </CDropdownMenu>
+                              </CDropdown>
+                            )}
+                          </CTableDataCell>
+                        </CTableRow>
+                    ))}
+                  </CTableBody>
+                </CTable>
+              </div>
             </CCardBody>
           </CCard>
         </CCol>
@@ -332,6 +396,7 @@ const Teams = () => {
       <CModal
         visible={showCoachModal}
         onClose={() => setShowCoachModal(false)}
+        size="sm"
       >
         <CForm onSubmit={handleAddCoach}>
           <CModalHeader>
@@ -364,12 +429,14 @@ const Teams = () => {
             <CButton 
               color="secondary" 
               onClick={() => setShowCoachModal(false)}
+              className="w-100 w-sm-auto"
             >
               Cancel
             </CButton>
             <CButton 
               color="primary" 
               type="submit"
+              className="w-100 w-sm-auto"
             >
               Add Coach
             </CButton>
@@ -381,6 +448,7 @@ const Teams = () => {
       <CModal
         visible={showClientModal}
         onClose={() => setShowClientModal(false)}
+        size="sm"
       >
         <CForm onSubmit={handleAddClient}>
           <CModalHeader>
@@ -419,7 +487,7 @@ const Teams = () => {
                 <option value="">Choose a coach...</option>
                 {coaches.map((coach, index) => (
                   <option key={index} value={index}>
-                    {coach.name}
+                    {coach.userId?.firstName} {coach.userId?.lastName || 'N/A'}
                   </option>
                 ))}
               </CFormSelect>
@@ -433,12 +501,14 @@ const Teams = () => {
                 setNewClient({ name: '', email: '' });
                 setSelectedCoach(null);
               }}
+              className="w-100 w-sm-auto"
             >
               Cancel
             </CButton>
             <CButton 
               color="primary" 
               type="submit"
+              className="w-100 w-sm-auto"
             >
               Add Client
             </CButton>
@@ -454,9 +524,10 @@ const Teams = () => {
           setClientToTransfer(null);
           setSelectedNewCoach(null);
         }}
+        size="sm"
       >
         <CModalHeader closeButton>
-          <CModalTitle>Transfer Client to Another Coach</CModalTitle>
+          <CModalTitle>Transfer Client</CModalTitle>
         </CModalHeader>
         <CModalBody>
           <CForm>
@@ -474,7 +545,7 @@ const Teams = () => {
               {coaches.map((coach, index) => (
                 index !== selectedCoach && (
                   <option key={index} value={index}>
-                    {coach.name}
+                    {coach.name || 'N/A'}
                   </option>
                 )
               ))}
@@ -489,6 +560,7 @@ const Teams = () => {
               setClientToTransfer(null);
               setSelectedNewCoach(null);
             }}
+            className="w-100 w-sm-auto"
           >
             Cancel
           </CButton>
@@ -499,6 +571,7 @@ const Teams = () => {
               handleTransferClient();
             }}
             disabled={selectedNewCoach === null}
+            className="w-100 w-sm-auto"
           >
             Transfer
           </CButton>
