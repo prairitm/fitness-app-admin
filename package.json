@@ -11,9 +11,15 @@
   },
   "license": "MIT",
   "scripts": {
+    "dev": "vite --mode development",
+    "prod": "vite --mode production",
     "build": "vite build",
+    "build:dev": "vite build --mode development",
+    "build:prod": "vite build --mode production",
+    "preview": "vite preview",
+    "preview:dev": "vite preview --mode development",
+    "preview:prod": "vite preview --mode production",
     "lint": "eslint",
-    "serve": "vite preview",
     "start": "vite"
   },
   "dependencies": {
