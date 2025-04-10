@@ -28,6 +28,11 @@ const getClientById = async (req, res) => {
     if (!client) {
       return res.status(404).json({ message: 'Client not found' });
     }
+
+    // Check if the client belongs to the user
+    if (client.userId._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to access this client' });
+    }
     
     res.json(client);
   } catch (error) {

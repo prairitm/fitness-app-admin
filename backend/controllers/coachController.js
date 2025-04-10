@@ -7,7 +7,7 @@ const Client = require('../models/clientModel');
 // @access  Private
 const getAllCoaches = async (req, res) => {
   try {
-    const coaches = await Coach.find()
+    const coaches = await Coach.find({ adminId: req.user._id })
       .populate('userId', 'firstName lastName email')
       .populate('clients');
     res.json(coaches);

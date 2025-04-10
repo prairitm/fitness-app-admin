@@ -59,10 +59,12 @@ const Teams = () => {
     try {
       setLoading(true);
       const response = await teamService.getCoaches();
+      console.log('Fetched coaches:', response.data);
+      // The backend already filters coaches by adminId, so we don't need additional filtering
       setCoaches(response.data);
     } catch (err) {
       setError('Failed to fetch coaches');
-      console.error(err);
+      console.error('Error fetching coaches:', err);
     } finally {
       setLoading(false);
     }
@@ -225,58 +227,74 @@ const Teams = () => {
               <h4 className="mb-0">Coaches</h4>
             </CCardHeader>
             <CCardBody className="p-0">
-              <div className="table-responsive">
-                <CTable hover align="middle">
-                  <CTableHead>
-                    <CTableRow>
-                      <CTableHeaderCell>Name</CTableHeaderCell>
-                      <CTableHeaderCell className="d-none d-md-table-cell">Email</CTableHeaderCell>
-                      <CTableHeaderCell>Clients</CTableHeaderCell>
-                      <CTableHeaderCell></CTableHeaderCell>
-                    </CTableRow>
-                  </CTableHead>
-                  <CTableBody>
-                    {filteredCoaches.map((coach, index) => (
-                      <CTableRow 
-                        key={index}
-                        active={selectedCoach === index}
-                        onClick={() => setSelectedCoach(index)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <CTableDataCell>
-                          <div className="d-flex align-items-center">
-                            <CAvatar color="primary" className="me-2">
-                              {(coach.name || (coach.userId?.firstName + ' ' + coach.userId?.lastName))[0]}
-                            </CAvatar>
-                            <span className="text-truncate">{coach.name || (coach.userId?.firstName + ' ' + coach.userId?.lastName) || 'N/A'}</span>
-                          </div>
-                        </CTableDataCell>
-                        <CTableDataCell className="d-none d-md-table-cell text-truncate">{coach.email || coach.userId?.email || 'N/A'}</CTableDataCell>
-                        <CTableDataCell>
-                          <CBadge color="info">{coach.clients?.length || 'N/A'}</CBadge>
-                        </CTableDataCell>
-                        <CTableDataCell>
-                          <CDropdown alignment="end">
-                            <CDropdownToggle color="link" caret={false}>
-                              <CIcon icon={cilOptions} />
-                            </CDropdownToggle>
-                            <CDropdownMenu>
-                              <CDropdownItem 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteCoach(index);
-                                }}
-                              >
-                                Delete
-                              </CDropdownItem>
-                            </CDropdownMenu>
-                          </CDropdown>
-                        </CTableDataCell>
+              {loading ? (
+                <div className="text-center p-4">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                </div>
+              ) : error ? (
+                <div className="text-center p-4">
+                  <CAlert color="danger">{error}</CAlert>
+                </div>
+              ) : coaches.length === 0 ? (
+                <div className="text-center p-4">
+                  <p>No coaches found. Add a coach to get started.</p>
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <CTable hover align="middle">
+                    <CTableHead>
+                      <CTableRow>
+                        <CTableHeaderCell>Name</CTableHeaderCell>
+                        <CTableHeaderCell className="d-none d-md-table-cell">Email</CTableHeaderCell>
+                        <CTableHeaderCell>Clients</CTableHeaderCell>
+                        <CTableHeaderCell></CTableHeaderCell>
                       </CTableRow>
-                    ))}
-                  </CTableBody>
-                </CTable>
-              </div>
+                    </CTableHead>
+                    <CTableBody>
+                      {filteredCoaches.map((coach, index) => (
+                        <CTableRow 
+                          key={index}
+                          active={selectedCoach === index}
+                          onClick={() => setSelectedCoach(index)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <CTableDataCell>
+                            <div className="d-flex align-items-center">
+                              <CAvatar color="primary" className="me-2">
+                                {(coach.name || (coach.userId?.firstName + ' ' + coach.userId?.lastName))[0]}
+                              </CAvatar>
+                              <span className="text-truncate">{coach.name || (coach.userId?.firstName + ' ' + coach.userId?.lastName) || 'N/A'}</span>
+                            </div>
+                          </CTableDataCell>
+                          <CTableDataCell className="d-none d-md-table-cell text-truncate">{coach.email || coach.userId?.email || 'N/A'}</CTableDataCell>
+                          <CTableDataCell>
+                            <CBadge color="info">{coach.clients?.length || 'N/A'}</CBadge>
+                          </CTableDataCell>
+                          <CTableDataCell>
+                            <CDropdown alignment="end">
+                              <CDropdownToggle color="link" caret={false}>
+                                <CIcon icon={cilOptions} />
+                              </CDropdownToggle>
+                              <CDropdownMenu>
+                                <CDropdownItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteCoach(index);
+                                  }}
+                                >
+                                  Delete
+                                </CDropdownItem>
+                              </CDropdownMenu>
+                            </CDropdown>
+                          </CTableDataCell>
+                        </CTableRow>
+                      ))}
+                    </CTableBody>
+                  </CTable>
+                </div>
+              )}
             </CCardBody>
           </CCard>
         </CCol>
@@ -487,7 +505,7 @@ const Teams = () => {
                 <option value="">Choose a coach...</option>
                 {coaches.map((coach, index) => (
                   <option key={index} value={index}>
-                    {coach.userId?.firstName} {coach.userId?.lastName || 'N/A'}
+                    {coach.userId?.firstName} {coach.userId?.lastName}
                   </option>
                 ))}
               </CFormSelect>
