@@ -216,7 +216,7 @@ const Teams = () => {
       </CRow>
 
       <CRow>
-        <CCol xs={12}>
+        <CCol xs={12} className="mb-4">
           {error && (
             <CAlert color="danger" dismissible onClose={() => setError(null)}>
               {error}
@@ -277,7 +277,7 @@ const Teams = () => {
                               <CDropdownToggle color="link" caret={false}>
                                 <CIcon icon={cilOptions} />
                               </CDropdownToggle>
-                              <CDropdownMenu>
+                              <CDropdownMenu style={{ position: 'absolute', zIndex: 1000 }}>
                                 <CDropdownItem 
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -303,7 +303,7 @@ const Teams = () => {
         <CCol xs={12}>
           <CCard>
             <CCardHeader>
-              <div className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
+              <div className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center">
                 <h4 className="mb-0">
                   {selectedCoach !== null 
                     ? `${coaches[selectedCoach]?.userId?.firstName} ${coaches[selectedCoach]?.userId?.lastName}` 
@@ -378,7 +378,7 @@ const Teams = () => {
                                 <CDropdownToggle color="link" caret={false}>
                                   <CIcon icon={cilOptions} />
                                 </CDropdownToggle>
-                                <CDropdownMenu>
+                                <CDropdownMenu style={{ position: 'fixed', zIndex: 1000 }}>
                                   <CDropdownItem 
                                     onClick={(e) => {
                                       e.stopPropagation();
