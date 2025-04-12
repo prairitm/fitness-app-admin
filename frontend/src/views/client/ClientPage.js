@@ -32,6 +32,33 @@ import { cilPlus } from '@coreui/icons';
 import './Calendar.css';
 import { workoutService } from '../../services/api';
 import { teamService } from '../../services/api';
+import { v4 as uuid } from 'uuid';
+
+// Add styles for superset exercises
+const styles = `
+  .superset-exercise {
+    border-left: 4px solid #321fdb;
+    background-color: rgba(50, 31, 219, 0.05);
+  }
+  
+  .superset-header {
+    border-bottom: 1px solid #e4e4e4;
+    padding-bottom: 0.5rem;
+  }
+  
+  .superset-footer {
+    border-top: 1px solid #e4e4e4;
+    padding-top: 0.5rem;
+  }
+  
+  .exercise-block {
+    transition: all 0.3s ease;
+  }
+  
+  .exercise-block:hover {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  }
+`;
 
 const ClientPage = () => {
   const { clientEmail } = useParams();
@@ -50,20 +77,35 @@ const ClientPage = () => {
 
   const [workoutForm, setWorkoutForm] = useState({
     title: '',
-    date: '',
-    type: 'workout',
     warmup: '',
+    cooldown: '',
+    date: '',
     exercises: [{
-      id: 1,
+      id: uuid(),
       letter: 'A',
       title: '',
-      metrics: [],
-      video: null,
-      videoUrl: ''
-    }],
-    cooldown: '',
-    description: ''
+      sets: '',
+      reps: '',
+      weight: '',
+      rpe: '',
+      rest: '',
+      videoUrl: '',
+      notes: '',
+      isSuperset: false,
+      supersetGroup: null
+    }]
   });
+
+  // Add styles to document head
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = styles;
+    document.head.appendChild(styleElement);
+    
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   const getNextLetter = (currentLetter) => {
     return String.fromCharCode(currentLetter.charCodeAt(0) + 1);
@@ -71,19 +113,76 @@ const ClientPage = () => {
 
   const handleAddExercise = () => {
     setWorkoutForm(prev => {
-      const lastExercise = prev.exercises[prev.exercises.length - 1];
-      const nextLetter = getNextLetter(lastExercise.letter);
+      // Get all used letters (including those in supersets)
+      const usedLetters = new Set(prev.exercises.map(ex => ex.letter));
+      
+      // Find the next available letter
+      let nextLetter = 'A';
+      while (usedLetters.has(nextLetter)) {
+        nextLetter = getNextLetter(nextLetter);
+      }
+      
       return {
         ...prev,
         exercises: [
           ...prev.exercises,
           {
-            id: Date.now(),
+            id: uuid(),
             letter: nextLetter,
             title: '',
-            metrics: [],
-            video: null,
-            videoUrl: ''
+            sets: '',
+            reps: '',
+            weight: '',
+            rpe: '',
+            rest: '',
+            videoUrl: '',
+            notes: '',
+            isSuperset: false,
+            supersetGroup: null
+          }
+        ]
+      };
+    });
+  };
+
+  const handleAddSuperset = () => {
+    setWorkoutForm(prev => {
+      const lastExercise = prev.exercises[prev.exercises.length - 1];
+      const nextLetter = getNextLetter(lastExercise.letter);
+      const supersetGroup = uuid(); // Create a unique group ID for the superset
+      
+      // Add two exercises as a superset
+      return {
+        ...prev,
+        exercises: [
+          ...prev.exercises,
+          {
+            id: uuid(),
+            letter: nextLetter,
+            title: '',
+            sets: '',
+            reps: '',
+            weight: '',
+            rpe: '',
+            rest: '',
+            videoUrl: '',
+            notes: '',
+            isSuperset: true,
+            supersetGroup: supersetGroup
+          },
+          {
+            id: uuid(),
+            letter: nextLetter + 'a', // Add 'a' to indicate it's part of the same superset
+            title: '',
+            sets: '',
+            reps: '',
+            weight: '',
+            rpe: '',
+            rest: '',
+            videoUrl: '',
+            notes: '',
+            isSuperset: true,
+            supersetGroup: supersetGroup
           }
         ]
       };
@@ -92,16 +191,95 @@ const ClientPage = () => {
 
   const handleDeleteExercise = (exerciseId) => {
     setWorkoutForm(prev => {
-      const filteredExercises = prev.exercises.filter(ex => ex.id !== exerciseId);
+      const exerciseToDelete = prev.exercises.find(ex => ex.id === exerciseId);
+      let filteredExercises = prev.exercises.filter(ex => ex.id !== exerciseId);
       
-      const reorderedExercises = filteredExercises.map((exercise, index) => ({
-        ...exercise,
-        letter: String.fromCharCode(65 + index)
-      }));
+      // If deleting a superset exercise, remove its partner
+      if (exerciseToDelete.isSuperset && exerciseToDelete.supersetGroup) {
+        filteredExercises = filteredExercises.filter(ex => 
+          ex.id === exerciseId || 
+          !ex.isSuperset || 
+          ex.supersetGroup !== exerciseToDelete.supersetGroup
+        );
+      }
+      
+      // Get all used letters (including those in supersets)
+      const usedLetters = new Set(filteredExercises.map(ex => ex.letter));
+      
+      // Reorder letters for non-superset exercises
+      const reorderedExercises = filteredExercises.map((exercise, index) => {
+        // If this exercise is part of a superset, keep its original letter
+        if (exercise.isSuperset) {
+          return exercise;
+        }
+        
+        // For non-superset exercises, find the next available letter
+        let letter = 'A';
+        while (usedLetters.has(letter)) {
+          letter = getNextLetter(letter);
+        }
+        usedLetters.add(letter);
+        
+        return {
+          ...exercise,
+          letter: letter,
+          isSuperset: false,
+          supersetGroup: null,
+          supersetOrder: null
+        };
+      });
 
       return {
         ...prev,
         exercises: reorderedExercises
+      };
+    });
+  };
+
+  const handleCreateSuperset = (firstExerciseId, secondExerciseId) => {
+    setWorkoutForm(prev => {
+      const firstExerciseIndex = prev.exercises.findIndex(ex => ex.id === firstExerciseId);
+      const secondExerciseIndex = prev.exercises.findIndex(ex => ex.id === secondExerciseId);
+      
+      if (firstExerciseIndex === -1 || secondExerciseIndex === -1) return prev;
+      
+      const supersetGroup = uuid();
+      const firstExercise = prev.exercises[firstExerciseIndex];
+      
+      // Create updated exercises array
+      const updatedExercises = prev.exercises.map((exercise, index) => {
+        if (index === firstExerciseIndex) {
+          return {
+            ...exercise,
+            isSuperset: true,
+            supersetGroup: supersetGroup,
+            supersetOrder: 1
+          };
+        } else if (index === secondExerciseIndex) {
+          return {
+            ...exercise,
+            isSuperset: true,
+            supersetGroup: supersetGroup,
+            supersetOrder: 2,
+            letter: firstExercise.letter // Use the same letter as the first exercise
+          };
+        }
+        return exercise;
+      });
+
+      // Reorder letters for all exercises after the superset
+      let currentLetter = firstExercise.letter;
+      for (let i = secondExerciseIndex + 1; i < updatedExercises.length; i++) {
+        currentLetter = getNextLetter(currentLetter);
+        updatedExercises[i] = {
+          ...updatedExercises[i],
+          letter: currentLetter
+        };
+      }
+
+      return {
+        ...prev,
+        exercises: updatedExercises
       };
     });
   };
@@ -112,18 +290,22 @@ const ClientPage = () => {
     setWorkoutForm({
       title: '',
       date: arg.dateStr,
-      type: 'workout',
       warmup: '',
+      cooldown: '',
       exercises: [{
-        id: 1,
+        id: uuid(),
         letter: 'A',
         title: '',
-        metrics: [],
-        video: null,
-        videoUrl: ''
+        sets: '',
+        reps: '',
+        weight: '',
+        rpe: '',
+        rest: '',
+        videoUrl: '',
+        notes: '',
+        isSuperset: false,
+        supersetGroup: null
       }],
-      cooldown: '',
-      description: ''
     });
     setShowWorkoutModal(true);
   };
@@ -198,19 +380,34 @@ const ClientPage = () => {
     setWorkoutForm({
       title: '',
       date: '',
-      type: 'workout',
       warmup: '',
+      cooldown: '',
       exercises: [{
-        id: 1,
+        id: uuid(),
         letter: 'A',
         title: '',
-        metrics: [],
-        video: null,
-        videoUrl: ''
+        sets: '',
+        reps: '',
+        weight: '',
+        rpe: '',
+        rest: '',
+        videoUrl: '',
+        notes: '',
+        isSuperset: false,
+        supersetGroup: null
       }],
-      cooldown: '',
-      description: ''
     });
+  };
+
+  const updateExerciseField = (exerciseId, field, value) => {
+    setWorkoutForm(prev => ({
+      ...prev,
+      exercises: prev.exercises.map(ex =>
+        ex.id === exerciseId
+          ? { ...ex, [field]: value }
+          : ex
+      )
+    }));
   };
 
   if (!clientData) {
@@ -316,7 +513,7 @@ const ClientPage = () => {
                   Workout
                 </CNavLink>
               </CNavItem>
-              <CNavItem>
+              {/* <CNavItem>
                 <CNavLink
                   active={activeTab === 'habit'}
                   onClick={() => {
@@ -348,7 +545,7 @@ const ClientPage = () => {
                 >
                   From Programs
                 </CNavLink>
-              </CNavItem>
+              </CNavItem> */}
             </CNav>
 
             <CTabContent className="pt-4">
@@ -361,100 +558,178 @@ const ClientPage = () => {
                       ...workoutForm,
                       title: e.target.value
                     })}
-                    placeholder="Untitled Workout"
+                    placeholder="Workout Title"
                   />
                 </div>
 
                 <div className="mb-4">
-                  <CFormLabel>Add warmup</CFormLabel>
+                  <CFormLabel>Warmup</CFormLabel>
                   <CFormTextarea
                     value={workoutForm.warmup || ''}
                     onChange={(e) => setWorkoutForm({
                       ...workoutForm,
                       warmup: e.target.value
                     })}
-                    placeholder="Describe warmup activities"
+                    placeholder="Add warmup instructions"
+                    rows={3}
                   />
                 </div>
 
                 <div className="mb-4">
-                  {workoutForm.exercises.map((exercise, index) => (
-                    <div key={exercise.id} className="mb-4">
-                      <div className="d-flex align-items-center mb-2">
-                        <h5 className="mb-0 me-2">{exercise.letter})</h5>
-                        <CFormInput
-                          placeholder="Exercise title (required)"
-                          value={exercise.title}
-                          onChange={(e) => {
-                            setWorkoutForm(prev => ({
-                              ...prev,
-                              exercises: prev.exercises.map(ex =>
-                                ex.id === exercise.id
-                                  ? { ...ex, title: e.target.value }
-                                  : ex
-                              )
-                            }));
-                          }}
-                          required
-                        />
-                        {workoutForm.exercises.length > 1 && (
-                          <CButton
-                            color="danger"
-                            variant="ghost"
-                            className="ms-2"
-                            onClick={() => handleDeleteExercise(exercise.id)}
-                          >
-                            ×
-                          </CButton>
-                        )}
-                      </div>
+                  {workoutForm.exercises.map((exercise, index) => {
+                    const isFirstSupersetExercise = exercise.isSuperset && 
+                      (!workoutForm.exercises[index - 1] || 
+                       workoutForm.exercises[index - 1].supersetGroup !== exercise.supersetGroup);
+                    
+                    const isLastSupersetExercise = exercise.isSuperset && 
+                      (!workoutForm.exercises[index + 1] || 
+                       workoutForm.exercises[index + 1].supersetGroup !== exercise.supersetGroup);
 
-                      <div className="d-flex gap-2 mb-2">
-                        <CFormInput
-                          placeholder="Paste video URL"
-                          value={exercise.videoUrl || ''}
-                          onChange={(e) => {
-                            setWorkoutForm(prev => ({
-                              ...prev,
-                              exercises: prev.exercises.map(ex =>
-                                ex.id === exercise.id
-                                  ? { ...ex, videoUrl: e.target.value }
-                                  : ex
+                    return (
+                      <React.Fragment key={exercise.id}>
+                        <div 
+                          className={`exercise-block p-3 border rounded mb-4 ${
+                            exercise.isSuperset ? 'superset-exercise' : ''
+                          }`}
+                        >
+                          {isFirstSupersetExercise && (
+                            <div className="superset-header mb-3">
+                              <h6 className="text-muted">Superset {exercise.letter}</h6>
+                            </div>
+                          )}
+                          
+                          <div className="d-flex align-items-center mb-3">
+                            {/* <div className="drag-handle me-2">⋮⋮</div> */}
+                            <h5 className="mb-0 me-2">
+                              {exercise.letter}
+                              {exercise.isSuperset ? (exercise.supersetOrder === 1 ? '1' : '2') : ''}
                               )
-                            }));
-                          }}
-                          className="w-100"
-                        />
-                      </div>
-                      
-                      <small className="text-muted d-block mb-3">Sets, Reps, Tempo, Rest etc.</small>
-                      <CFormInput
-                        placeholder="Notes"
-                        value={exercise.notes || ''}
-                        onChange={(e) => {
-                          setWorkoutForm(prev => ({
-                            ...prev,
-                            exercises: prev.exercises.map(ex =>
-                              ex.id === exercise.id
-                                ? { ...ex, notes: e.target.value }
-                                : ex
-                            )
-                          }));
-                        }}
-                        className="mb-2"
-                      />
-                    </div>
-                  ))}
+                            </h5>
+                            <div className="flex-grow-1">
+                              <CFormInput
+                                placeholder="Search or enter exercise name"
+                                value={exercise.title}
+                                onChange={(e) => {
+                                  setWorkoutForm(prev => ({
+                                    ...prev,
+                                    exercises: prev.exercises.map(ex =>
+                                      ex.id === exercise.id
+                                        ? { ...ex, title: e.target.value }
+                                        : ex
+                                    )
+                                  }));
+                                }}
+                                required
+                              />
+                            </div>
+                            <CButton
+                              color="danger"
+                              variant="ghost"
+                              className="ms-2"
+                              onClick={() => handleDeleteExercise(exercise.id)}
+                            >
+                              ×
+                            </CButton>
+                          </div>
+{/* 
+                          <div className="exercise-details mb-3">
+                            <div className="row g-2">
+                              <div className="col">
+                                <CFormInput
+                                  placeholder="Sets"
+                                  type="number"
+                                  value={exercise.sets || ''}
+                                  onChange={(e) => updateExerciseField(exercise.id, 'sets', e.target.value)}
+                                />
+                              </div>
+                              <div className="col">
+                                <CFormInput
+                                  placeholder="Reps"
+                                  value={exercise.reps || ''}
+                                  onChange={(e) => updateExerciseField(exercise.id, 'reps', e.target.value)}
+                                />
+                              </div>
+                              <div className="col">
+                                <CFormInput
+                                  placeholder="Weight"
+                                  value={exercise.weight || ''}
+                                  onChange={(e) => updateExerciseField(exercise.id, 'weight', e.target.value)}
+                                />
+                              </div>
+                              <div className="col">
+                                <CFormInput
+                                  placeholder="RPE"
+                                  type="number"
+                                  min="1"
+                                  max="10"
+                                  value={exercise.rpe || ''}
+                                  onChange={(e) => updateExerciseField(exercise.id, 'rpe', e.target.value)}
+                                />
+                              </div>
+                              <div className="col">
+                                <CFormInput
+                                  placeholder="Rest (sec)"
+                                  type="number"
+                                  value={exercise.rest || ''}
+                                  onChange={(e) => updateExerciseField(exercise.id, 'rest', e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          </div> */}
+
+                          <div className="video-section mb-3">
+                            <CFormInput
+                              placeholder="Video URL"
+                              value={exercise.videoUrl || ''}
+                              onChange={(e) => updateExerciseField(exercise.id, 'videoUrl', e.target.value)}
+                            />
+                            {exercise.videoUrl && (
+                              <div className="video-preview mt-2">
+                                {/* Video thumbnail preview component */}
+                              </div>
+                            )}
+                          </div>
+
+                          <CFormTextarea
+                            placeholder="Exercise instructions and coaching cues"
+                            value={exercise.notes || ''}
+                            onChange={(e) => updateExerciseField(exercise.id, 'notes', e.target.value)}
+                            rows={2}
+                          />
+
+                          {isLastSupersetExercise && (
+                            <div className="superset-footer mt-3">
+                              <small className="text-muted">Perform these exercises back-to-back with minimal rest</small>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Add superset button between exercises if there's a next exercise */}
+                        {index < workoutForm.exercises.length - 1 && !exercise.isSuperset && !workoutForm.exercises[index + 1].isSuperset && (
+                          <div className="text-center mb-4">
+                            <CButton
+                              color="secondary"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCreateSuperset(exercise.id, workoutForm.exercises[index + 1].id)}
+                            >
+                              Make Superset
+                            </CButton>
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
 
-                <div className="d-flex gap-2 mb-3">
+                <div className="exercise-actions mb-4">
                   <CButton 
-                    color="outline" 
+                    color="primary" 
                     variant="outline" 
-                    className="w-50 mb-2 mx-auto d-block"
+                    className="w-100"
                     onClick={handleAddExercise}
                   >
-                    + Exercise
+                    Add Exercise
                   </CButton>
                 </div>
 
